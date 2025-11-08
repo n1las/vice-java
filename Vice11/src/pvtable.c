@@ -4,9 +4,9 @@
 #include "defs.h"
 
 
-#define EXTRACT_SCORE(x) ((x & 0xFFFF) - INF_BOUND)
-#define EXTRACT_DEPTH(x) ((x >> 16) & 0x3F)
-#define EXTRACT_FLAGS(x) ((x >> 23) & 0x3)
+#define EXTRACT_SCORE(x) ((int)(x & 0xFFFF) - INF_BOUND)
+#define EXTRACT_DEPTH(x) ((int)(x >> 16) & 0x3F)
+#define EXTRACT_FLAGS(x) ((int)(x >> 23) & 0x3)
 #define EXTRACT_MOVE(x) ((int)(x >> 25))
 
 #define FOLD_DATA(sc, de, fl, mv) ( (sc + INF_BOUND) | (de << 16) | (fl << 23)  | ((U64)mv << 25))
@@ -46,8 +46,8 @@ void TempHashTest(char *fen) {
 }
 
 
-void VerifyEntrySMP(S_HASHENTRY *entry) {
     /*
+void VerifyEntrySMP(S_HASHENTRY *entry) {
 	U64 data = FOLD_DATA(entry->score, entry->depth, entry->flags, entry->move);
 	U64 key = entry->posKey ^ data;
 
@@ -63,8 +63,8 @@ void VerifyEntrySMP(S_HASHENTRY *entry) {
 	if (flag != entry->flags) { printf("flags error"); exit(1);}
 	if (score != entry->score) { printf("score error"); exit(1);}
 	if (depth != entry->depth) { printf("depth error"); exit(1);}
-    */
 }
+    */
 
 
 

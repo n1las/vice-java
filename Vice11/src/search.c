@@ -335,12 +335,12 @@ int StartWorkerThread(void *data) {
     S_SEARCH_WORKER_DATA *workerData = (S_SEARCH_WORKER_DATA *)data;
 	printf("Thread:%d Starts\n", workerData->threadNumber);
 	IterativeDeepen(workerData);
-	printf("Thread:%d Ends\n", workerData->threadNumber, workerData->depth);
+	printf("Thread:%d Ends depth %d\n", workerData->threadNumber, workerData->depth);
 	if (workerData->threadNumber == 0) {
 		printf("bestmove %s\n",PrMove(workerData->bestMove));
 	}
     free(data);
-
+	return 0;
 }
 
 
