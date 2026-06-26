@@ -92,10 +92,6 @@ void ParseGo(char* line, S_SEARCHINFO *info, S_BOARD *pos, S_HASHTABLE *table) {
 		info->depth = MAXDEPTH;
 	}
 
-	printf("time:%d start:%d stop:%d depth:%d timeset:%d\n",
-		time,info->starttime,info->stoptime,info->depth,info->timeset);
-	//SearchPosition(pos, info, HashTable);
-
 	JoinSearchThread(info);
 
 	info->stopped = FALSE;
@@ -137,7 +133,6 @@ void ParsePosition(char* lineIn, S_BOARD *pos) {
               ptrChar++;
         }
     }
-	PrintBoard(pos);
 }
 
 void Uci_Loop(S_BOARD *pos, S_SEARCHINFO *info) {
@@ -175,7 +170,6 @@ void Uci_Loop(S_BOARD *pos, S_SEARCHINFO *info) {
 			ClearHashTable(HashTable);
             ParsePosition("position startpos\n", pos);
         } else if (!strncmp(line, "go", 2)) {
-            printf("Seen Go..\n");
             ParseGo(line, info, pos, HashTable);
         } else if (!strncmp(line, "run", 3)) {
             ParseFen(WAC_2, pos);
@@ -199,13 +193,11 @@ void Uci_Loop(S_BOARD *pos, S_SEARCHINFO *info) {
 			sscanf(line,"%*s %*s %*s %*s %d",&MB);
 			if(MB < 4) MB = 4;
 			if(MB > MAX_HASH) MB = MAX_HASH;
-			printf("Set Hash to %d MB\n",MB);
 			InitHashTable(HashTable, MB);
 		} else if (!strncmp(line, "setoption name Threads value ", 29)) {			
 			sscanf(line,"%*s %*s %*s %*s %d",&MB);
 			if(MB < 1) MB = 1;
 			if(MB > MAXTHREADS) MB = MAXTHREADS;
-			printf("Set Threads to %d\n",MB);
 			info->threadNum = MB;
 		} else if (!strncmp(line, "setoption name Book value ", 26)) {
 			// if(ptrTrue != NULL) {

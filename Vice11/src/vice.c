@@ -25,10 +25,6 @@ int main(void) {
 	//TempHashTest(PERFT);
 	//TempHashTest(WAC1);
 	//exit(0);
-	printf("Welcome to Vice! Type 'vice' for console mode...\n");
-	// ParseFen(PERFT, pos);
-	// PrintBoard(pos);
-	// PerftTest(5, pos);
 
 	char line[256];
 	while (TRUE) {

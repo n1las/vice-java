@@ -294,7 +294,6 @@ int SearchPosition_Thread(void *data) {
 	memcpy(pos, searchData->originalPosition, sizeof(S_BOARD));
 	SearchPosition(pos, searchData->info, searchData->ttable);
 	free(pos);
-	printf("Freed\n");
 	return 0;
 }
 
@@ -333,9 +332,7 @@ void IterativeDeepen(S_SEARCH_WORKER_DATA *workerData) {
 int StartWorkerThread(void *data) {
 
     S_SEARCH_WORKER_DATA *workerData = (S_SEARCH_WORKER_DATA *)data;
-	printf("Thread:%d Starts\n", workerData->threadNumber);
 	IterativeDeepen(workerData);
-	printf("Thread:%d Ends depth %d\n", workerData->threadNumber, workerData->depth);
 	if (workerData->threadNumber == 0) {
 		printf("bestmove %s\n",PrMove(workerData->bestMove));
 	}
@@ -358,7 +355,6 @@ void SetupWorker(int threadNum, thrd_t *workerTh, S_BOARD *pos, S_SEARCHINFO *in
 
 void CreateSearchWorkers(int numThreads, S_BOARD *pos, S_SEARCHINFO *info, S_HASHTABLE *table) {
 
-	printf("CreateSearchWorkers:%d\n",numThreads);
 	for (int i = 0; i < numThreads; i++) {
         SetupWorker(i, &workerThreads[i], pos, info, table);
     }
@@ -379,7 +375,6 @@ void SearchPosition(S_BOARD *pos, S_SEARCHINFO *info, S_HASHTABLE *table) {
 	if(EngineOptions->UseBook == TRUE) {
 		bestMove = GetBookMove(pos);
 		if(bestMove != NOMOVE) {
-			printf("Book move:%s\n",PrMove(bestMove));
 			printf("bestmove %s\n",PrMove(bestMove));
 			return;
 		}

@@ -35,15 +35,14 @@ void InitPolyBook() {
 		}
 		
 		NumEntries = position / sizeof(S_POLY_BOOK_ENTRY);
-		printf("%ld Entries Found In File\n", NumEntries);
-		
+
 		entries = (S_POLY_BOOK_ENTRY*)malloc(NumEntries * sizeof(S_POLY_BOOK_ENTRY));
 		rewind(pFile);
-		
+
 		size_t returnValue;
 		returnValue = fread(entries, sizeof(S_POLY_BOOK_ENTRY), NumEntries, pFile);
-		printf("fread() %lld Entries Read in from file\n", returnValue);
-		
+		(void)returnValue;
+
 		if(NumEntries > 0) {
 			EngineOptions->UseBook = TRUE;
 		}
