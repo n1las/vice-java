@@ -1,18 +1,20 @@
 // search.c
 
 #include "stdio.h"
+#include "string.h"
 #include "defs.h"
+#include "tinycthread.h"
 
 
 int rootDepth;
+thrd_t workerThreads[MAXTHREADS];
+
 
 static void CheckUp(S_SEARCHINFO *info) {
 	// .. check if time up, or interrupt from GUI
 	if(info->timeset == TRUE && GetTimeMs() > info->stoptime) {
 		info->stopped = TRUE;
 	}
-
-	ReadInput(info);
 }
 
 static void PickNextMove(int moveNum, S_MOVELIST *list) {
@@ -51,7 +53,7 @@ static int IsRepetition(const S_BOARD *pos) {
 	return FALSE;
 }
 
-static void ClearForSearch(S_BOARD *pos, S_SEARCHINFO *info) {
+static void ClearForSearch(S_BOARD *pos, S_SEARCHINFO *info, S_HASHTABLE *table) {
 
 	int index = 0;
 	int index2 = 0;
@@ -68,10 +70,11 @@ static void ClearForSearch(S_BOARD *pos, S_SEARCHINFO *info) {
 		}
 	}
 
-	pos->HashTable->overWrite=0;
-	pos->HashTable->hit=0;
-	pos->HashTable->cut=0;
+	table->overWrite=0;
+	table->hit=0;
+	table->cut=0;
 	pos->ply = 0;
+	table->currentAge++;
 
 	info->stopped = 0;
 	info->nodes = 0;
@@ -99,7 +102,7 @@ static int Quiescence(int alpha, int beta, S_BOARD *pos, S_SEARCHINFO *info) {
 
 	int Score = EvalPosition(pos);
 
-	ASSERT(Score>-INFINITE && Score<INFINITE);
+	ASSERT(Score>-AB_BOUND && Score<AB_BOUND);
 
 	if(Score >= beta) {
 		return beta;
@@ -114,7 +117,7 @@ static int Quiescence(int alpha, int beta, S_BOARD *pos, S_SEARCHINFO *info) {
 
     int MoveNum = 0;
 	int Legal = 0;
-	Score = -INFINITE;
+	Score = -AB_BOUND;
 
 	for(MoveNum = 0; MoveNum < list->count; ++MoveNum) {
 
@@ -144,12 +147,10 @@ static int Quiescence(int alpha, int beta, S_BOARD *pos, S_SEARCHINFO *info) {
 		}
     }
 
-	ASSERT(alpha >= OldAlpha);
-
 	return alpha;
 }
 
-static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO *info, int DoNull) {
+static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO *info, S_HASHTABLE *table, int DoNull) {
 
 	ASSERT(CheckBoard(pos));
 	ASSERT(beta>alpha);
@@ -180,17 +181,17 @@ static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO 
 		depth++;
 	}
 
-	int Score = -INFINITE;
+	int Score = -AB_BOUND;
 	int PvMove = NOMOVE;
 
-	if( ProbeHashEntry(pos, &PvMove, &Score, alpha, beta, depth) == TRUE ) {
-		pos->HashTable->cut++;
+	if( ProbeHashEntry(pos, table, &PvMove, &Score, alpha, beta, depth) == TRUE ) {
+		table->cut++;
 		return Score;
 	}
 
-	if( DoNull && !InCheck && pos->ply && (pos->bigPce[pos->side] > 0) && depth >= 4) {
+	if( DoNull && !InCheck && pos->ply && (pos->bigPce[pos->side] > 1) && depth >= 4) {
 		MakeNullMove(pos);
-		Score = -AlphaBeta( -beta, -beta + 1, depth-4, pos, info, FALSE);
+		Score = -AlphaBeta( -beta, -beta + 1, depth-4, pos, info, table, FALSE);
 		TakeNullMove(pos);
 		if(info->stopped == TRUE) {
 			return 0;
@@ -210,9 +211,9 @@ static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO 
 	int OldAlpha = alpha;
 	int BestMove = NOMOVE;
 
-	int BestScore = -INFINITE;
+	int BestScore = -AB_BOUND;
 
-	Score = -INFINITE;
+	Score = -AB_BOUND;
 
 	if( PvMove != NOMOVE) {
 		for(MoveNum = 0; MoveNum < list->count; ++MoveNum) {
@@ -233,7 +234,7 @@ static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO 
         }
 
 		Legal++;
-		Score = -AlphaBeta( -beta, -alpha, depth-1, pos, info, TRUE);
+		Score = -AlphaBeta( -beta, -alpha, depth-1, pos, info, table, TRUE);
 		TakeMove(pos);
 
 		if(info->stopped == TRUE) {
@@ -254,7 +255,7 @@ static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO 
 						pos->searchKillers[0][pos->ply] = list->moves[MoveNum].move;
 					}
 
-					StoreHashEntry(pos, BestMove, beta, HFBETA, depth);
+					StoreHashEntry(pos, table, BestMove, beta, HFBETA, depth);
 
 					return beta;
 				}
@@ -269,7 +270,7 @@ static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO 
 
 	if(Legal == 0) {
 		if(InCheck) {
-			return -INFINITE + pos->ply;
+			return -AB_BOUND + pos->ply;
 		} else {
 			return 0;
 		}
@@ -278,78 +279,116 @@ static int AlphaBeta(int alpha, int beta, int depth, S_BOARD *pos, S_SEARCHINFO 
 	ASSERT(alpha>=OldAlpha);
 
 	if(alpha != OldAlpha) {
-		StoreHashEntry(pos, BestMove, BestScore, HFEXACT, depth);
+		StoreHashEntry(pos, table, BestMove, BestScore, HFEXACT, depth);
 	} else {
-		StoreHashEntry(pos, BestMove, alpha, HFALPHA, depth);
+		StoreHashEntry(pos, table, BestMove, alpha, HFALPHA, depth);
 	}
 
 	return alpha;
 }
 
-void SearchPosition(S_BOARD *pos, S_SEARCHINFO *info) {
 
-	int bestMove = NOMOVE;
-	int bestScore = -INFINITE;
+int SearchPosition_Thread(void *data) {
+	S_SEARCH_THREAD_DATA *searchData = (S_SEARCH_THREAD_DATA *)data;
+	S_BOARD *pos = malloc(sizeof(S_BOARD));
+	memcpy(pos, searchData->originalPosition, sizeof(S_BOARD));
+	SearchPosition(pos, searchData->info, searchData->ttable);
+	free(pos);
+	return 0;
+}
+
+void IterativeDeepen(S_SEARCH_WORKER_DATA *workerData) {
+
+	workerData->bestMove = NOMOVE;
+	int bestScore = -AB_BOUND;
 	int currentDepth = 0;
 	int pvMoves = 0;
 	int pvNum = 0;
+	
+    for( currentDepth = 1; currentDepth <= workerData->info->depth; ++currentDepth ) {
+        rootDepth = currentDepth;
+        bestScore = AlphaBeta(-AB_BOUND, AB_BOUND, currentDepth, workerData->pos, workerData->info, workerData->ttable, TRUE);
 
-	ClearForSearch(pos,info);
+        if(workerData->info->stopped == TRUE) {
+            break;
+        }
+    
+		if(workerData->threadNumber == 0) {
+            pvMoves = GetPvLine(currentDepth, workerData->pos, workerData->ttable);
+            workerData->bestMove = workerData->pos->PvArray[0];
+            printf("info score cp %d depth %d nodes %ld time %d pv",
+                bestScore,currentDepth,workerData->info->nodes,GetTimeMs()-workerData->info->starttime);
+        
+            for(pvNum = 0; pvNum < pvMoves; ++pvNum) {
+                printf(" %s",PrMove(workerData->pos->PvArray[pvNum]));
+            }
+            printf("\n");
+        }
+    }    
+
+}
+
+
+int StartWorkerThread(void *data) {
+
+    S_SEARCH_WORKER_DATA *workerData = (S_SEARCH_WORKER_DATA *)data;
+	IterativeDeepen(workerData);
+	if (workerData->threadNumber == 0) {
+		printf("bestmove %s\n",PrMove(workerData->bestMove));
+	}
+    free(data);
+	return 0;
+}
+
+
+void SetupWorker(int threadNum, thrd_t *workerTh, S_BOARD *pos, S_SEARCHINFO *info, S_HASHTABLE *table) {
+    
+	S_SEARCH_WORKER_DATA *pWorkerData = malloc(sizeof(S_SEARCH_WORKER_DATA));
+    pWorkerData->pos = malloc(sizeof(S_BOARD));
+	memcpy(pWorkerData->pos, pos, sizeof(S_BOARD));
+	pWorkerData->info = info;
+	pWorkerData->ttable = table;
+	pWorkerData->threadNumber = threadNum;
+	thrd_create(workerTh, &StartWorkerThread, (void*)pWorkerData);
+}
+
+
+void CreateSearchWorkers(int numThreads, S_BOARD *pos, S_SEARCHINFO *info, S_HASHTABLE *table) {
+
+	for (int i = 0; i < numThreads; i++) {
+        SetupWorker(i, &workerThreads[i], pos, info, table);
+    }
+}
+
+
+
+void SearchPosition(S_BOARD *pos, S_SEARCHINFO *info, S_HASHTABLE *table) {
+
+	int bestMove = NOMOVE;
+
+	int numThreads = info->threadNum;
+	if(numThreads < 1) numThreads = 1;
+	if(numThreads > MAXTHREADS) numThreads = MAXTHREADS;
+
+	ClearForSearch(pos,info,table);
 	
 	if(EngineOptions->UseBook == TRUE) {
 		bestMove = GetBookMove(pos);
+		if(bestMove != NOMOVE) {
+			printf("bestmove %s\n",PrMove(bestMove));
+			return;
+		}
 	}
 
 	//printf("Search depth:%d\n",info->depth);
 
 	// iterative deepening
 	if(bestMove == NOMOVE) {
-		for( currentDepth = 1; currentDepth <= info->depth; ++currentDepth ) {
-								// alpha	 beta
-			rootDepth = currentDepth;
-			bestScore = AlphaBeta(-INFINITE, INFINITE, currentDepth, pos, info, TRUE);
-
-			if(info->stopped == TRUE) {
-				break;
-			}
-
-			pvMoves = GetPvLine(currentDepth, pos);
-			bestMove = pos->PvArray[0];
-			if(info->GAME_MODE == UCIMODE) {
-				printf("info score cp %d depth %d nodes %ld time %d ",
-					bestScore,currentDepth,info->nodes,GetTimeMs()-info->starttime);
-			} else if(info->GAME_MODE == XBOARDMODE && info->POST_THINKING == TRUE) {
-				printf("%d %d %d %ld ",
-					currentDepth,bestScore,(GetTimeMs()-info->starttime)/10,info->nodes);
-			} else if(info->POST_THINKING == TRUE) {
-				printf("score:%d depth:%d nodes:%ld time:%d(ms) ",
-					bestScore,currentDepth,info->nodes,GetTimeMs()-info->starttime);
-			}
-			if(info->GAME_MODE == UCIMODE || info->POST_THINKING == TRUE) {
-				pvMoves = GetPvLine(currentDepth, pos);
-				if(!info->GAME_MODE == XBOARDMODE) {
-					printf("pv");
-				}
-				for(pvNum = 0; pvNum < pvMoves; ++pvNum) {
-					printf(" %s",PrMove(pos->PvArray[pvNum]));
-				}
-				printf("\n");
-			}
-
-			//printf("Hits:%d Overwrite:%d NewWrite:%d Cut:%d\nOrdering %.2f NullCut:%d\n",pos->HashTable->hit,pos->HashTable->overWrite,pos->HashTable->newWrite,pos->HashTable->cut,
-			//(info->fhf/info->fh)*100,info->nullCut);
-		}
+        CreateSearchWorkers(numThreads, pos, info, table);
 	}
 
-	if(info->GAME_MODE == UCIMODE) {
-		printf("bestmove %s\n",PrMove(bestMove));
-	} else if(info->GAME_MODE == XBOARDMODE) {
-		printf("move %s\n",PrMove(bestMove));
-		MakeMove(pos, bestMove);
-	} else {
-		printf("\n\n***!! Vice makes move %s !!***\n\n",PrMove(bestMove));
-		MakeMove(pos, bestMove);
-		PrintBoard(pos);
+	for (int i = 0; i < numThreads; i++) {
+		thrd_join(workerThreads[i], NULL);
 	}
 
 }

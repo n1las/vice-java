@@ -9,6 +9,10 @@ You can find the playlist here: [Link to playlist](https://www.youtube.com/playl
 
 See branch 106
 
+## Where is the Latest Version
+
+You'll find the latest SMP version on the Branch for Chapter 106
+
 ## Getting in touch / Contributing
 
 You can find the Discord server here: https://discord.gg/9hCUD4n7R2

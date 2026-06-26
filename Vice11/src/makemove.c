@@ -111,10 +111,6 @@ static void MovePiece(const int from, const int to, S_BOARD *pos) {
 	int col = PieceCol[pce];
 	ASSERT(SideValid(col));
     ASSERT(PieceValid(pce));
-	
-#ifdef DEBUG
-	int t_PieceNum = FALSE;
-#endif
 
 	HASH_PCE(pce,from);
 	pos->pieces[from] = EMPTY;
@@ -132,13 +128,9 @@ static void MovePiece(const int from, const int to, S_BOARD *pos) {
 	for(index = 0; index < pos->pceNum[pce]; ++index) {
 		if(pos->pList[pce][index] == from) {
 			pos->pList[pce][index] = to;
-#ifdef DEBUG
-			t_PieceNum = TRUE;
-#endif
 			break;
 		}
 	}
-	ASSERT(t_PieceNum);
 }
 
 int MakeMove(S_BOARD *pos, int move) {
